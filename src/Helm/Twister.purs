@@ -131,14 +131,13 @@ colour k hue = [ 0xB1, knobCC k, clamp 0 127 hue ]
 -- | A ring at position 0 still shows its first LED, so this is the only way
 -- | to make an encoder look *unused* rather than "at zero".
 -- |
--- | **Unverified.** Channel 3 is the device's animation channel in the
--- | Midifighter manual. Nothing here has watched this land yet. Delete it if it
--- | does nothing.
+-- | Channel 3 is the device's animation channel. Verified 2026-10-17 on the
+-- | Selene page's surfaces, whose unused encoders go dark.
 ringBrightness :: Knob -> Int -> Array Int
 ringBrightness k level = [ 0xB2, knobCC k, 65 + clamp 0 30 level ]
 
 -- | How bright an encoder's colour LED is, 0 (off) to 30 (full): channel 3,
--- | values 17–47. Unverified, as `ringBrightness` is.
+-- | values 17–47. Verified with `ringBrightness`.
 colourBrightness :: Knob -> Int -> Array Int
 colourBrightness k level = [ 0xB2, knobCC k, 17 + clamp 0 30 level ]
 
