@@ -31,6 +31,8 @@ module Helm.Twister
   , parse
   , ring
   , colour
+  , ringBrightness
+  , colourBrightness
   , layerSelect
   , port
   ) where
@@ -122,6 +124,23 @@ ring k v = [ 0xB0, knobCC k, clamp 0 127 v ]
 -- | Set an encoder's colour, as a position on the device's hue wheel, 0–127.
 colour :: Knob -> Int -> Array Int
 colour k hue = [ 0xB1, knobCC k, clamp 0 127 hue ]
+
+-- | How bright an encoder's ring is, 0 (off) to 30 (full): channel 3, values
+-- | 65–95.
+-- |
+-- | A ring at position 0 still shows its first LED, so this is the only way
+-- | to make an encoder look *unused* rather than "at zero".
+-- |
+-- | **Unverified.** Channel 3 is the device's animation channel in the
+-- | Midifighter manual. Nothing here has watched this land yet. Delete it if it
+-- | does nothing.
+ringBrightness :: Knob -> Int -> Array Int
+ringBrightness k level = [ 0xB2, knobCC k, 65 + clamp 0 30 level ]
+
+-- | How bright an encoder's colour LED is, 0 (off) to 30 (full): channel 3,
+-- | values 17–47. Unverified, as `ringBrightness` is.
+colourBrightness :: Knob -> Int -> Array Int
+colourBrightness k level = [ 0xB2, knobCC k, 17 + clamp 0 30 level ]
 
 -- | Ask the device to show a layer: channel 4, CC 0–3, value 127.
 -- |

@@ -7,7 +7,7 @@ import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Console (log)
 import Helm.Midi (controlChange, unsafeCC, unsafeChannel, unsafeMidiValue)
-import Helm.Twister (TwisterMsg(..), layerOf, colour, parse, ring)
+import Helm.Twister (TwisterMsg(..), layerOf, colour, colourBrightness, parse, ring, ringBrightness)
 import Helm.Twister.Guard (Event(..), empty, step, timing)
 import Test.Assert (assertEqual)
 
@@ -37,6 +37,8 @@ main = do
   -- Lights
   assertEqual { actual: ring k5 200, expected: [ 0xB0, 21, 127 ] }
   assertEqual { actual: colour k5 40, expected: [ 0xB1, 21, 40 ] }
+  assertEqual { actual: ringBrightness k5 0, expected: [ 0xB2, 21, 65 ] }
+  assertEqual { actual: colourBrightness k5 99, expected: [ 0xB2, 21, 47 ] }
   assertEqual
     { actual: controlChange (unsafeChannel 16) (unsafeCC 7) (unsafeMidiValue 100)
     , expected: [ 0xBF, 7, 100 ]
