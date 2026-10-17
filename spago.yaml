@@ -1,0 +1,35 @@
+package:
+  name: helm
+  description: >
+    Helm — every hardware controller, under one banner. Device profiles
+    (how a controller's messages decode, what its lights can show, its
+    quirks) and the one Web MIDI FFI, shared by producing-with-your-feet
+    and Triggerfish. Bindings — what a knob means — stay in the apps.
+  dependencies:
+    - aff
+    - arrays
+    - effect
+    - either
+    - exceptions
+    - foldable-traversable
+    - integers
+    - js-timers
+    - maybe
+    - nullable
+    - ordered-collections
+    - prelude
+    - refs
+    - tuples
+  build:
+    strict: true
+  test:
+    main: Test.Main
+    dependencies:
+      - assert
+      - console
+
+# A workspace of its own so Helm builds and tests here without a consumer.
+# PWYF and Triggerfish reach it as a path dependency and ignore this stanza.
+workspace:
+  packageSet:
+    registry: 77.13.1
