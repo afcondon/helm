@@ -17,3 +17,7 @@ spago build && spago test
 ```
 
 Consumers reach it by path (`extraPackages: helm: { path: ../helm }`).
+
+## Licence
+
+MIT. See `LICENSE`.
