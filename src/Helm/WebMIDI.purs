@@ -29,6 +29,8 @@ module Helm.WebMIDI
   , requestAccessAff
   , requestHubAccess
   , requestHubAccessAff
+  , claimOutput
+  , releaseOutput
   , outputs
   , inputs
   , findOutput
@@ -85,6 +87,8 @@ data PortMatch
 
 foreign import requestAccessImpl :: EffectFn3 Boolean (EffectFn1 MIDIAccess Unit) (EffectFn1 String Unit) Unit
 foreign import requestHubAccessImpl :: EffectFn5 String String Number (EffectFn1 MIDIAccess Unit) (EffectFn1 String Unit) Unit
+foreign import claimOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
+foreign import releaseOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
 foreign import outputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import inputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import findOutputImpl :: EffectFn2 MIDIAccess { tag :: String, value :: String } (Nullable MIDIOutput)
@@ -133,6 +137,23 @@ requestHubAccessAff opts = makeAff \cb -> do
     Left msg -> cb (Left (error msg))
     Right access -> cb (Right access)
   pure nonCanceler
+
+-- | **Hold an output, so only this app's messages reach it** — on the hub.
+-- |
+-- | For a device with no read-back, the Twister first: two writers are
+-- | last-writer-wins and the loser is never told. While this app holds the
+-- | output, anyone else's sends to it are dropped and the sender is told who
+-- | holds it. The claim belongs to this connection: it is made again after the
+-- | hub reconnects, and ends when the page goes. A second tab of the same app
+-- | does not share it.
+-- |
+-- | Through the browser's Web MIDI there is no one to claim from, and this
+-- | does nothing.
+claimOutput :: MIDIAccess -> MIDIOutput -> Effect Unit
+claimOutput = runEffectFn2 claimOutputImpl
+
+releaseOutput :: MIDIAccess -> MIDIOutput -> Effect Unit
+releaseOutput = runEffectFn2 releaseOutputImpl
 
 -- | Ports, with duplicates removed: identity is the id, first sighting wins.
 outputs :: MIDIAccess -> Effect (Array MidiPort)

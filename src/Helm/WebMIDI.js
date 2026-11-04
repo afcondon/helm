@@ -122,6 +122,20 @@ export const onStateChangeImpl = (access, handler) => {
 // since two owners of one controller is the problem the hub exists to end.
 export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
   const access = { inputs: new Map(), outputs: new Map(), onstatechange: null, sysexEnabled: true };
+  // Outputs this app has claimed. A claim ends with its connection, so they
+  // are claimed again on every reconnect.
+  const claimed = new Set();
+  const say = (msg) => {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+  };
+  access.claim = (id) => {
+    claimed.add(id);
+    say({ t: "claim", port: id });
+  };
+  access.release = (id) => {
+    claimed.delete(id);
+    say({ t: "release", port: id });
+  };
   let ws = null;
   let granted = false;
   let failed = false;
@@ -177,6 +191,7 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
     ws.onopen = () => {
       warned = false;
       ws.send(JSON.stringify({ t: "hello", client }));
+      claimed.forEach((id) => ws.send(JSON.stringify({ t: "claim", port: id })));
     };
     ws.onmessage = (ev) => {
       let m;
@@ -224,4 +239,14 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
     onFail("Helm's hub is not answering at " + url + " (is it running?)");
   }, waitMs);
   connect();
+};
+
+// Claims exist only on the hub. Through the browser's Web MIDI there is no one
+// to claim from, so these do nothing there.
+export const claimOutputImpl = (access, out) => {
+  if (access && typeof access.claim === "function") access.claim(portId(out));
+};
+
+export const releaseOutputImpl = (access, out) => {
+  if (access && typeof access.release === "function") access.release(portId(out));
 };
