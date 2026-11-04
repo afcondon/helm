@@ -21,3 +21,18 @@ Consumers reach it by path (`extraPackages: helm: { path: ../helm }`).
 ## Licence
 
 MIT. See `LICENSE`.
+
+## The hub
+
+`hub/hub.mjs` is the one process that holds the rig's MIDI controllers, so
+that PWYF, Quadrat and Triggerfish can share them (plan:
+`docs/kb/plans/quadrat-the-sampler.md`, phase 3). It opens every MIDI port on
+the machine and relays them over a WebSocket on **:3039**; `GET /state` says
+which ports, which apps, and what went wrong last.
+
+An app asks for access with `Helm.WebMIDI.requestHubAccess` instead of
+`requestAccess` and gets a `MIDIAccess` like any other: every function in
+`Helm.WebMIDI` works on it unchanged. It never falls back to Web MIDI.
+
+Supervised by Bosun in the Atlantis group (`helm-hub`). `npm install` once in
+`hub/`; no build step.

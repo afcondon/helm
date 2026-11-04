@@ -98,3 +98,130 @@ export const onStateChangeImpl = (access, handler) => {
     if (access.onstatechange === cb) access.onstatechange = null;
   };
 };
+
+// ---- the hub ------------------------------------------------------------------
+//
+// Access through Helm's hub (`hub/hub.mjs`) instead of the browser: an object
+// shaped like `MIDIAccess`, so every function above works on it unchanged and
+// an app changes how it asks for access and nothing else. The hub holds the
+// ports; this relays them.
+//
+// What it promises, as Web MIDI does:
+// - `inputs` / `outputs` are Maps with `forEach`, of ports with `id`, `name`,
+//   `type`, `state`; an input's `onmidimessage` gets `{ data }`; an output has
+//   `send(bytes, atMs)`.
+// - `onstatechange` fires with `{ port }` for each port that comes or goes,
+//   including every port when the hub itself goes away and comes back, so an
+//   app re-opens what it had chosen exactly as it does after a replug.
+//
+// Where it is better: a port's id is its name, the same after a replug and a
+// hub restart, and a port object that stays is the same object.
+//
+// Access is granted on the first port list. If the hub is not there within
+// `waitMs`, the request fails and says so: it never falls back to Web MIDI,
+// since two owners of one controller is the problem the hub exists to end.
+export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
+  const access = { inputs: new Map(), outputs: new Map(), onstatechange: null, sysexEnabled: true };
+  let ws = null;
+  let granted = false;
+  let failed = false;
+  let warned = false;
+
+  const fire = (port) => {
+    if (access.onstatechange) access.onstatechange({ port });
+  };
+
+  const makeInput = (id, name) => ({ id, name, type: "input", state: "connected", connection: "open", onmidimessage: null });
+  const makeOutput = (id, name) => ({
+    id,
+    name,
+    type: "output",
+    state: "connected",
+    connection: "open",
+    send(data, atMs) {
+      if (!ws || ws.readyState !== 1) {
+        if (!warned) console.warn("Helm hub: not connected; a send to " + id + " was dropped");
+        warned = true;
+        return;
+      }
+      const delayMs = typeof atMs === "number" ? Math.max(0, atMs - performance.now()) : 0;
+      ws.send(JSON.stringify({ t: "send", port: id, data: Array.from(data), delayMs }));
+    }
+  });
+
+  const update = (map, listed, make) => {
+    const ids = new Set(listed.map((p) => p.id));
+    for (const [id, port] of Array.from(map.entries())) {
+      if (!ids.has(id)) {
+        map.delete(id);
+        port.state = "disconnected";
+        fire(port);
+      }
+    }
+    for (const p of listed) {
+      if (!map.has(p.id)) {
+        const port = make(p.id, p.name);
+        map.set(p.id, port);
+        fire(port);
+      }
+    }
+  };
+
+  const dropAll = () => {
+    update(access.inputs, [], makeInput);
+    update(access.outputs, [], makeOutput);
+  };
+
+  const connect = () => {
+    ws = new WebSocket(url);
+    ws.onopen = () => {
+      warned = false;
+      ws.send(JSON.stringify({ t: "hello", client }));
+    };
+    ws.onmessage = (ev) => {
+      let m;
+      try {
+        m = JSON.parse(ev.data);
+      } catch (e) {
+        return;
+      }
+      if (failed) return;
+      if (m.t === "ports") {
+        update(access.inputs, m.inputs || [], makeInput);
+        update(access.outputs, m.outputs || [], makeOutput);
+        if (!granted) {
+          granted = true;
+          onOk(access);
+        }
+      } else if (m.t === "msg") {
+        const port = access.inputs.get(m.port);
+        if (port && port.onmidimessage) port.onmidimessage({ data: Uint8Array.from(m.data) });
+      } else if (m.t === "error") {
+        console.error("Helm hub: " + m.text);
+      }
+    };
+    // Before access is granted, keep trying until `waitMs` runs out; after,
+    // for ever, since an app holding access expects its ports to come back.
+    //
+    // From whichever of `close` and `error` arrives, once: a browser fires
+    // both for a refused connection, and Node's WebSocket only `error`.
+    const socket = ws;
+    let ended = false;
+    const lost = () => {
+      if (ended || socket !== ws) return;
+      ended = true;
+      dropAll();
+      if (!failed) setTimeout(connect, 1000);
+    };
+    ws.onclose = lost;
+    ws.onerror = lost;
+  };
+
+  setTimeout(() => {
+    if (granted) return;
+    failed = true;
+    if (ws) ws.close();
+    onFail("Helm's hub is not answering at " + url + " (is it running?)");
+  }, waitMs);
+  connect();
+};

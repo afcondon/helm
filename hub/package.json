@@ -1,0 +1,11 @@
+{
+  "name": "helm-hub",
+  "private": true,
+  "type": "module",
+  "description": "Helm's hub: the one process that holds the rig's MIDI controllers, shared by every app over a WebSocket.",
+  "license": "MIT",
+  "dependencies": {
+    "@julusian/midi": "^3.6.1",
+    "ws": "^8.18.0"
+  }
+}

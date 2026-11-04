@@ -27,6 +27,8 @@ module Helm.WebMIDI
   , PortMatch(..)
   , requestAccess
   , requestAccessAff
+  , requestHubAccess
+  , requestHubAccessAff
   , outputs
   , inputs
   , findOutput
@@ -49,7 +51,7 @@ import Data.Nullable (Nullable, toMaybe)
 import Effect (Effect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Exception (error)
-import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, mkEffectFn1, runEffectFn1, runEffectFn2, runEffectFn3)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn5, mkEffectFn1, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn5)
 
 foreign import data MIDIAccess :: Type
 foreign import data MIDIOutput :: Type
@@ -82,6 +84,7 @@ data PortMatch
   | NameContains String
 
 foreign import requestAccessImpl :: EffectFn3 Boolean (EffectFn1 MIDIAccess Unit) (EffectFn1 String Unit) Unit
+foreign import requestHubAccessImpl :: EffectFn5 String String Number (EffectFn1 MIDIAccess Unit) (EffectFn1 String Unit) Unit
 foreign import outputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import inputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import findOutputImpl :: EffectFn2 MIDIAccess { tag :: String, value :: String } (Nullable MIDIOutput)
@@ -105,6 +108,28 @@ requestAccess { sysex } k =
 requestAccessAff :: { sysex :: Boolean } -> Aff MIDIAccess
 requestAccessAff opts = makeAff \cb -> do
   requestAccess opts case _ of
+    Left msg -> cb (Left (error msg))
+    Right access -> cb (Right access)
+  pure nonCanceler
+
+-- | Access through **Helm's hub** (`hub/hub.mjs`): the daemon that holds the
+-- | rig's controllers so that every app can share them. What comes back is a
+-- | `MIDIAccess` like any other, and everything in this module works on it,
+-- | so moving an app onto the hub changes this one call.
+-- |
+-- | `client` names the app in the hub's `/state`. If the hub has not answered
+-- | within `waitMs` the request fails, saying so; it never falls back to Web
+-- | MIDI, because two owners of one controller is what the hub ends. After
+-- | access is granted the hub may go and come back: its ports disconnect and
+-- | reconnect, as after a replug, and an app that re-opens on `onStateChange`
+-- | recovers by itself.
+requestHubAccess :: { url :: String, client :: String, waitMs :: Number } -> (Either String MIDIAccess -> Effect Unit) -> Effect Unit
+requestHubAccess { url, client, waitMs } k =
+  runEffectFn5 requestHubAccessImpl url client waitMs (mkEffectFn1 (k <<< Right)) (mkEffectFn1 (k <<< Left))
+
+requestHubAccessAff :: { url :: String, client :: String, waitMs :: Number } -> Aff MIDIAccess
+requestHubAccessAff opts = makeAff \cb -> do
+  requestHubAccess opts case _ of
     Left msg -> cb (Left (error msg))
     Right access -> cb (Right access)
   pure nonCanceler
