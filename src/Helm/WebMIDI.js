@@ -283,6 +283,8 @@ export const releaseNameImpl = (access, name) => {
   if (access && typeof access.release === "function") access.release(name);
 };
 
+export const viaHubImpl = (access) => !!(access && typeof access.want === "function");
+
 export const holdingImpl = (access, name) =>
   !!(access && access.self !== null && access.holders && access.holders[name] === access.self);
 

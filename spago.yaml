@@ -19,6 +19,7 @@ package:
     - ordered-collections
     - prelude
     - refs
+    - strings
     - tuples
   build:
     strict: true

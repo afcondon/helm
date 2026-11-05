@@ -35,6 +35,7 @@ module Helm.WebMIDI
   , releaseName
   , holderOf
   , holding
+  , viaHub
   , wantName
   , grantName
   , refuseWant
@@ -102,6 +103,7 @@ foreign import claimNameImpl :: EffectFn2 MIDIAccess String Unit
 foreign import releaseNameImpl :: EffectFn2 MIDIAccess String Unit
 foreign import holderOfImpl :: EffectFn2 MIDIAccess String (Nullable String)
 foreign import holdingImpl :: EffectFn2 MIDIAccess String Boolean
+foreign import viaHubImpl :: EffectFn1 MIDIAccess Boolean
 foreign import wantNameImpl :: EffectFn2 MIDIAccess String Unit
 foreign import grantNameImpl :: EffectFn3 MIDIAccess String String Unit
 foreign import refuseWantImpl :: EffectFn4 MIDIAccess String String String Unit
@@ -198,6 +200,12 @@ holderOf access name = toMaybe <$> runEffectFn2 holderOfImpl access name
 -- | app's name, which a second tab also has. `false` through Web MIDI.
 holding :: MIDIAccess -> String -> Effect Boolean
 holding = runEffectFn2 holdingImpl
+
+-- | Whether this access goes through Helm's hub, where things can be held.
+-- | Through the browser's Web MIDI nothing is held and nobody holds anything,
+-- | so an app there treats every device as its own.
+viaHub :: MIDIAccess -> Effect Boolean
+viaHub = runEffectFn1 viaHubImpl
 
 -- | **Ask for a name.** Free, it is claimed. Held, the holder is told who
 -- | wants it (`onWanted`) and answers with `grantName` or `refuseWant`; the
