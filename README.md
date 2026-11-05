@@ -36,3 +36,13 @@ An app asks for access with `Helm.WebMIDI.requestHubAccess` instead of
 
 Supervised by Bosun in the Atlantis group (`helm-hub`). `npm install` once in
 `hub/`; no build step.
+
+**Claims.** A device with no read-back (the Twister) can be held by one app:
+`Helm.WebMIDI.claimOutput access out` sends `{t:"claim"}` and the hub then
+passes only that connection's sends to the port. Anyone else's are dropped
+and reported to the sender, naming the holder, once per run of refusals, and
+counted as `refused` in `/state`. A claim belongs to a *connection*, not a
+name, so a second tab of the same app is refused too; it lapses when the
+connection closes, and the holder can hand it on by name (`grant`). The hub
+client re-claims after a reconnect. Inputs are not claimed: every client still
+hears the Twister's knobs. Tested on hardware 2026-11-05.
