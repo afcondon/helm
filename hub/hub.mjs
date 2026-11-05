@@ -44,6 +44,11 @@
 // the Twister between them is the problem this exists to end. It ends when
 // that connection does. Unclaimed outputs take anyone's sends, as before.
 //
+// A claim is on a NAME, and most names are outputs. A name that is not a port
+// claims a responsibility instead: `itajara:switches` is held by whichever
+// process is answering the looper's footswitches, so a page that could also
+// answer them reads `claims` and stands back. The hub treats both alike.
+//
 // Not yet: the MC6 session as a lease. PWYF opens and closes its own sessions
 // around every write, so the hub cannot hold one without owning MC6 session
 // framing, which is Helm's phase 3 (the MC6 code moving into Helm).

@@ -31,6 +31,9 @@ module Helm.WebMIDI
   , requestHubAccessAff
   , claimOutput
   , releaseOutput
+  , claimName
+  , releaseName
+  , holderOf
   , outputs
   , inputs
   , findOutput
@@ -88,6 +91,9 @@ data PortMatch
 foreign import requestAccessImpl :: EffectFn3 Boolean (EffectFn1 MIDIAccess Unit) (EffectFn1 String Unit) Unit
 foreign import requestHubAccessImpl :: EffectFn5 String String Number (EffectFn1 MIDIAccess Unit) (EffectFn1 String Unit) Unit
 foreign import claimOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
+foreign import claimNameImpl :: EffectFn2 MIDIAccess String Unit
+foreign import releaseNameImpl :: EffectFn2 MIDIAccess String Unit
+foreign import holderOfImpl :: EffectFn2 MIDIAccess String (Nullable String)
 foreign import releaseOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
 foreign import outputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import inputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
@@ -154,6 +160,25 @@ claimOutput = runEffectFn2 claimOutputImpl
 
 releaseOutput :: MIDIAccess -> MIDIOutput -> Effect Unit
 releaseOutput = runEffectFn2 releaseOutputImpl
+
+-- | **Claim a responsibility rather than a port**, on the hub.
+-- |
+-- | A claim is on a name, and most names are outputs; this is for the ones
+-- | that are not: `itajara:switches`, the looper's footswitches, is held by
+-- | whichever process is answering them, so a page that could also answer
+-- | them knows to stand back instead of acting on every press a second time.
+-- | Declared, not inferred: the holder says so, and the claim ends with its
+-- | connection, so a holder that dies hands the duty back by itself.
+claimName :: MIDIAccess -> String -> Effect Unit
+claimName = runEffectFn2 claimNameImpl
+
+releaseName :: MIDIAccess -> String -> Effect Unit
+releaseName = runEffectFn2 releaseNameImpl
+
+-- | The client holding a name on the hub, as the hub last said. `Nothing`
+-- | through the browser's Web MIDI, where nothing is ever held.
+holderOf :: MIDIAccess -> String -> Effect (Maybe String)
+holderOf access name = toMaybe <$> runEffectFn2 holderOfImpl access name
 
 -- | Ports, with duplicates removed: identity is the id, first sighting wins.
 outputs :: MIDIAccess -> Effect (Array MidiPort)

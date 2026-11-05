@@ -122,6 +122,8 @@ export const onStateChangeImpl = (access, handler) => {
 // since two owners of one controller is the problem the hub exists to end.
 export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
   const access = { inputs: new Map(), outputs: new Map(), onstatechange: null, sysexEnabled: true };
+  // Who holds what, as the hub last said: name -> client name.
+  access.claims = {};
   // Outputs this app has claimed. A claim ends with its connection, so they
   // are claimed again on every reconnect.
   const claimed = new Set();
@@ -211,6 +213,8 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
       } else if (m.t === "msg") {
         const port = access.inputs.get(m.port);
         if (port && port.onmidimessage) port.onmidimessage({ data: Uint8Array.from(m.data) });
+      } else if (m.t === "claims") {
+        access.claims = m.claims || {};
       } else if (m.t === "error") {
         console.error("Helm hub: " + m.text);
       }
@@ -249,4 +253,17 @@ export const claimOutputImpl = (access, out) => {
 
 export const releaseOutputImpl = (access, out) => {
   if (access && typeof access.release === "function") access.release(portId(out));
+};
+
+export const claimNameImpl = (access, name) => {
+  if (access && typeof access.claim === "function") access.claim(name);
+};
+
+export const releaseNameImpl = (access, name) => {
+  if (access && typeof access.release === "function") access.release(name);
+};
+
+export const holderOfImpl = (access, name) => {
+  const c = access && access.claims;
+  return c && typeof c[name] === "string" ? c[name] : null;
 };
