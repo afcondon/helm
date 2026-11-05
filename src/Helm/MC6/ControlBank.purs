@@ -1,0 +1,162 @@
+module Helm.MC6.ControlBank
+  ( ControlBank
+  , ControlBankSwitch
+  , switchCount
+  , switchLetter
+  , emptySwitch
+  , blankBank
+  , doubleClaims
+  , padSwitches
+  , ccToggleMessages
+  , ccMomentaryMessages
+  , controlBankToPresets
+  ) where
+
+import Prelude
+
+import Data.Array as Array
+import Data.Maybe (Maybe(..))
+import Helm.MC6.Message as MC6Msg
+import Helm.MC6.Types (MC6Action(..), MC6Message, MC6MsgType(..), MC6TogglePosition(..))
+
+type ControlBankSwitch =
+  { label :: String       -- 8 char max (MC6 short name)
+  , longName :: String    -- 24 char max (MC6 long name)
+  , toToggle :: Boolean
+  , messages :: Array MC6Message
+  }
+
+type ControlBank =
+  { id :: String
+  , name :: String
+  , description :: String
+  , mc6BankNumber :: Int
+  -- | Where this page used to keep its way back, before that became an
+  -- | ordinary switch. Read once by `Global.migrateReturns` and meaningless
+  -- | afterwards; kept only so the migration can still run on a store that has
+  -- | not seen it yet.
+  , returnSwitchIndex :: Int
+  , switches :: Array ControlBankSwitch
+  }
+
+-- | How many switches a bank has.
+-- |
+-- | Twelve, because that is what an MC6 bank holds: six on the unit and two
+-- | FS3X's worth. Authored pages carried nine for a long time, which meant a
+-- | quarter of every page was unreachable from this app — and the space is
+-- | worth having whether or not a second FS3X is plugged in, since a page swap
+-- | on one of the six brings the rest within reach anyway.
+switchCount :: Int
+switchCount = 12
+
+-- | A B C … L, in index order. Physical position is a separate question and is
+-- | answered by the view's `physicalOrder`.
+switchLetter :: Int -> String
+switchLetter i = case Array.index letters i of
+  Just l -> l
+  Nothing -> "?"
+  where
+  letters = [ "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L" ]
+
+emptySwitch :: ControlBankSwitch
+emptySwitch = { label: "", longName: "", toToggle: false, messages: [] }
+
+-- | A bank with nothing in it — which is how this app CLEARS one.
+-- |
+-- | There is no erase command worth having: twelve empty presets and an empty
+-- | name is exactly what an empty bank is, and writing one travels the same
+-- | path as writing a real one. So clearing and programming are a single loop
+-- | over a single list, and the code that clears is the code that has been
+-- | exercised every time anything was ever written.
+-- |
+-- | A named alternative would be a second, rarer path that only runs on the day
+-- | you are wiping the board, which is the worst possible day for it to be the
+-- | least-tested thing in the file.
+blankBank :: Int -> ControlBank
+blankBank n =
+  { id: "blank-" <> show n
+  , name: ""
+  , description: "Cleared"
+  , mc6BankNumber: n
+  , returnSwitchIndex: 0
+  , switches: Array.replicate switchCount emptySwitch
+  }
+
+-- | Banks that more than one page claims, with the pages that claim them.
+-- |
+-- | **A list with two pages on one bank number cannot be checked.** The write
+-- | takes both and the device keeps whichever went last; the survey looks the
+-- | bank up and takes whichever comes first. So the page that was written and
+-- | the page that is compared are different pages, and the card reports
+-- | "device disagrees" about a write that was in fact perfect — while the page
+-- | the person was actually looking at silently never reached the hardware.
+-- |
+-- | This is not hypothetical and it was not rare. Ten pages taken off the
+-- | device with *Take a copy of this bank* sat on banks 0-6, 17, 19 and 21;
+-- | five of them landed on top of the loop machine's own pages, and the result
+-- | was five red cards that survived a day of hunting for a fault in the MC6
+-- | (2026-08-24). The device had done exactly as it was told, twice.
+-- |
+-- | The old guard could not see it: it compared the *set* of generated bank
+-- | numbers against the reserved table and then explicitly forgave control
+-- | banks anywhere, which is precisely the permission that let one land on a
+-- | claimed bank. Sets have no multiplicity, and multiplicity was the bug.
+doubleClaims :: Array ControlBank -> Array { bank :: Int, pages :: Array String }
+doubleClaims banks =
+  Array.filter (\c -> Array.length c.pages > 1)
+    (map (\n -> { bank: n, pages: pagesOn n }) numbers)
+  where
+  numbers = Array.nub (Array.sort (map _.mc6BankNumber banks))
+  pagesOn n = map _.id (Array.filter (\cb -> cb.mc6BankNumber == n) banks)
+
+-- | Bring a bank up to the full twelve without disturbing what is there.
+-- |
+-- | Applied where banks are read back in, so pages authored when a bank had
+-- | nine switches gain the other three rather than needing a migration. Takes
+-- | rather than errors on an over-long array, since the device would only
+-- | ignore the excess anyway.
+padSwitches :: ControlBank -> ControlBank
+padSwitches cb = cb
+  { switches = Array.take switchCount (cb.switches <> Array.replicate switchCount emptySwitch) }
+
+-- | CC toggle pair: ToggleOn sends val 127, ToggleOff sends val 0.
+-- | MC6 native toggle mode handles the state; we just provide both positions.
+ccToggleMessages :: Int -> Int -> Array MC6Message
+ccToggleMessages ch cc =
+  [ { msgType: MsgCC, channel: ch, data1: cc, data2: 127
+    , data3: 0, data4: 0, action: ActionPress
+    , togglePosition: ToggleOn, msgIndex: 0 }
+  , { msgType: MsgCC, channel: ch, data1: cc, data2: 0
+    , data3: 0, data4: 0, action: ActionPress
+    , togglePosition: ToggleOff, msgIndex: 1 }
+  ]
+
+-- | CC momentary pair: Press sends val 127, Release sends val 0.
+ccMomentaryMessages :: Int -> Int -> Array MC6Message
+ccMomentaryMessages ch cc =
+  [ MC6Msg.ccMessage ch cc 127 ActionPress
+  , MC6Msg.ccMessage ch cc 0 ActionRelease
+  ]
+
+-- | Compile a page into the preset records SysEx wants.
+-- |
+-- | It used to substitute a bank jump into whichever switch the page declared
+-- | as its return, which made one switch on every page mean something the page
+-- | itself did not say. A global switch (`Data.MC6.Global`) does that job now
+-- | and says so, so this compiles what is there and nothing else.
+controlBankToPresets
+  :: ControlBank
+  -> Array { switchIndex :: Int, shortName :: String, longName :: String, toToggle :: Boolean, messages :: Array MC6Message }
+controlBankToPresets cb =
+  Array.mapWithIndex toPreset cb.switches
+  where
+  toPreset idx sw =
+    { switchIndex: idx
+    , shortName: sw.label
+    , longName: sw.longName
+    , toToggle: sw.toToggle
+    , messages: indexMessages sw.messages
+    }
+
+  indexMessages :: Array MC6Message -> Array MC6Message
+  indexMessages msgs = Array.mapWithIndex (\i m -> m { msgIndex = i }) msgs
