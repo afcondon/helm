@@ -46,3 +46,12 @@ name, so a second tab of the same app is refused too; it lapses when the
 connection closes, and the holder can hand it on by name (`grant`). The hub
 client re-claims after a reconnect. Inputs are not claimed: every client still
 hears the Twister's knobs. Tested on hardware 2026-11-05.
+
+**Asking for a held name.** `wantName` claims a free name; for a held one the
+hub passes `wanted` to the holder, which answers with `grantName` or
+`refuseWant` (the wanter hears `refused`, with the reason). The hub decides
+nothing: who *ought* to hold a name is the holders' business. Each client is
+told its own connection id, and claims carry holders by id as well as by name,
+so `holding access name` answers "is it this connection", which two tabs with
+one name could not tell from `holderOf`. `onClaims`, `onWanted` and
+`onRefused` are the listeners.

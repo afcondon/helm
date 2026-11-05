@@ -21,14 +21,25 @@
 //                  The app diffs the lists; the hub sends no per-port events.
 //                {t:"msg", port, data:[bytes]}   every input message, to all.
 //                {t:"error", text}               a send that could not go.
-//                {t:"claims", claims:{port: client}}  who holds which output,
-//                  on connect and whenever it changes.
+//                {t:"claims", claims:{port: client}, holders:{port: id}}
+//                  who holds which name, on connect and whenever it changes:
+//                  by client name (for people) and by connection id (so two
+//                  connections with one name can each tell whether it is them).
+//                {t:"you", id}                   this connection's id, on connect.
+//                {t:"wanted", port, by}          to a holder: `by` wants the name.
+//                {t:"refused", port, by, why}    to a wanter: the holder said no.
 //   app -> hub   {t:"hello", client}             names the app in /state.
 //                {t:"send", port, data:[bytes], delayMs}
 //                {t:"claim", port}               hold an output: only the
 //                  holder's sends reach it. Granted if no live client holds it.
 //                {t:"grant", port, to}           the holder hands it to `to`.
 //                {t:"release", port}
+//                {t:"want", port}                ask for a name: a claim if no
+//                  one holds it, otherwise passed to the holder as "wanted",
+//                  who grants it or refuses. The hub decides nothing: who
+//                  ought to hold a name is the holders' business, and the
+//                  hub only carries the asking.
+//                {t:"refuse", port, to, why}     the holder says no to `to`.
 //
 // A port's id is its name (with " #2" for a second port of the same name),
 // so it is the same across a replug and across a hub restart, which Web
@@ -164,7 +175,14 @@ let nextId = 1;
 const claimsMessage = () => ({
   t: "claims",
   claims: Object.fromEntries([...claims].map(([port, c]) => [port, c.name])),
+  holders: Object.fromEntries([...claims].map(([port, c]) => [port, c.id])),
 });
+
+// The one live client by this name, or a reason there is not exactly one.
+const byName = (name) => {
+  const found = [...clients].filter((c) => c.name === String(name));
+  return found.length === 1 ? found[0] : `${found.length} clients are called ${name}`;
+};
 
 // A claim ends with its connection.
 const dropClaimsOf = (client) => {
@@ -241,13 +259,34 @@ const onMessage = (client, text) => {
       broadcast(claimsMessage());
       return;
     }
+    case "want": {
+      const holder = claims.get(m.port);
+      if (holder === client) return;
+      if (holder === undefined) {
+        claims.set(m.port, client);
+        console.log(`want: ${m.port} -> ${client.name} (it was free)`);
+        broadcast(claimsMessage());
+        return;
+      }
+      console.log(`want: ${client.name} wants ${m.port} from ${holder.name}`);
+      if (holder.ws.readyState === 1)
+        holder.ws.send(JSON.stringify({ t: "wanted", port: m.port, by: client.name }));
+      return;
+    }
+    case "refuse": {
+      const to = byName(m.to);
+      if (typeof to === "string") return report(`cannot refuse ${m.to}: ${to}`, client);
+      console.log(`refuse: ${client.name} keeps ${m.port} from ${m.to}: ${m.why || ""}`);
+      if (to.ws.readyState === 1)
+        to.ws.send(JSON.stringify({ t: "refused", port: m.port, by: client.name, why: String(m.why || "") }));
+      return;
+    }
     case "grant": {
       if (claims.get(m.port) !== client)
         return report(`${client.name} does not hold ${m.port}, so cannot grant it`, client);
-      const to = [...clients].filter((c) => c.name === String(m.to));
-      if (to.length !== 1)
-        return report(`cannot grant ${m.port} to ${m.to}: ${to.length} clients have that name`, client);
-      claims.set(m.port, to[0]);
+      const to = byName(m.to);
+      if (typeof to === "string") return report(`cannot grant ${m.port} to ${m.to}: ${to}`, client);
+      claims.set(m.port, to);
       console.log(`grant: ${m.port} -> ${m.to} (from ${client.name})`);
       broadcast(claimsMessage());
       return;
@@ -299,6 +338,7 @@ const wss = new WebSocketServer({ server });
 wss.on("connection", (ws) => {
   const client = { ws, id: nextId++, name: "unnamed", since: new Date().toISOString(), sent: 0, refused: 0 };
   clients.add(client);
+  ws.send(JSON.stringify({ t: "you", id: client.id }));
   ws.send(JSON.stringify(portsMessage()));
   ws.send(JSON.stringify(claimsMessage()));
   ws.on("message", (data) => onMessage(client, String(data)));

@@ -138,6 +138,18 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
     claimed.delete(id);
     say({ t: "release", port: id });
   };
+  // This connection's id, and who holds what by connection: so an app can
+  // tell "I hold it" from "another tab with my name holds it".
+  access.self = null;
+  access.holders = {};
+  access.want = (id) => say({ t: "want", port: id });
+  access.grant = (id, to) => say({ t: "grant", port: id, to });
+  access.refuse = (id, to, why) => say({ t: "refuse", port: id, to, why });
+  // Listeners: (port, by) when someone wants a name we hold; (port, by, why)
+  // when a holder refused us; () whenever the claims change.
+  access.onWanted = new Set();
+  access.onRefused = new Set();
+  access.onClaims = new Set();
   let ws = null;
   let granted = false;
   let failed = false;
@@ -213,8 +225,16 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
       } else if (m.t === "msg") {
         const port = access.inputs.get(m.port);
         if (port && port.onmidimessage) port.onmidimessage({ data: Uint8Array.from(m.data) });
+      } else if (m.t === "you") {
+        access.self = m.id;
       } else if (m.t === "claims") {
         access.claims = m.claims || {};
+        access.holders = m.holders || {};
+        access.onClaims.forEach((k) => k());
+      } else if (m.t === "wanted") {
+        access.onWanted.forEach((k) => k(String(m.port), String(m.by)));
+      } else if (m.t === "refused") {
+        access.onRefused.forEach((k) => k(String(m.port), String(m.by), String(m.why || "")));
       } else if (m.t === "error") {
         console.error("Helm hub: " + m.text);
       }
@@ -262,6 +282,36 @@ export const claimNameImpl = (access, name) => {
 export const releaseNameImpl = (access, name) => {
   if (access && typeof access.release === "function") access.release(name);
 };
+
+export const holdingImpl = (access, name) =>
+  !!(access && access.self !== null && access.holders && access.holders[name] === access.self);
+
+export const wantNameImpl = (access, name) => {
+  if (access && typeof access.want === "function") access.want(name);
+};
+
+export const grantNameImpl = (access, name, to) => {
+  if (access && typeof access.grant === "function") access.grant(name, to);
+};
+
+export const refuseWantImpl = (access, name, to, why) => {
+  if (access && typeof access.refuse === "function") access.refuse(name, to, why);
+};
+
+// Each returns its own unsubscribe. Through Web MIDI nothing is ever said.
+const listen = (set, k) => {
+  if (!set) return () => {};
+  set.add(k);
+  return () => set.delete(k);
+};
+
+export const onWantedImpl = (access, k) =>
+  listen(access && access.onWanted, (port, by) => k(port)(by)());
+
+export const onRefusedImpl = (access, k) =>
+  listen(access && access.onRefused, (port, by, why) => k(port)(by)(why)());
+
+export const onClaimsImpl = (access, k) => listen(access && access.onClaims, () => k());
 
 export const holderOfImpl = (access, name) => {
   const c = access && access.claims;

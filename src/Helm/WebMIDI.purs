@@ -34,6 +34,13 @@ module Helm.WebMIDI
   , claimName
   , releaseName
   , holderOf
+  , holding
+  , wantName
+  , grantName
+  , refuseWant
+  , onWanted
+  , onRefused
+  , onClaims
   , outputs
   , inputs
   , findOutput
@@ -56,7 +63,7 @@ import Data.Nullable (Nullable, toMaybe)
 import Effect (Effect)
 import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Exception (error)
-import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn5, mkEffectFn1, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn5)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, EffectFn5, mkEffectFn1, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4, runEffectFn5)
 
 foreign import data MIDIAccess :: Type
 foreign import data MIDIOutput :: Type
@@ -94,6 +101,13 @@ foreign import claimOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
 foreign import claimNameImpl :: EffectFn2 MIDIAccess String Unit
 foreign import releaseNameImpl :: EffectFn2 MIDIAccess String Unit
 foreign import holderOfImpl :: EffectFn2 MIDIAccess String (Nullable String)
+foreign import holdingImpl :: EffectFn2 MIDIAccess String Boolean
+foreign import wantNameImpl :: EffectFn2 MIDIAccess String Unit
+foreign import grantNameImpl :: EffectFn3 MIDIAccess String String Unit
+foreign import refuseWantImpl :: EffectFn4 MIDIAccess String String String Unit
+foreign import onWantedImpl :: EffectFn2 MIDIAccess (String -> String -> Effect Unit) (Effect Unit)
+foreign import onRefusedImpl :: EffectFn2 MIDIAccess (String -> String -> String -> Effect Unit) (Effect Unit)
+foreign import onClaimsImpl :: EffectFn2 MIDIAccess (Effect Unit) (Effect Unit)
 foreign import releaseOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
 foreign import outputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import inputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
@@ -179,6 +193,39 @@ releaseName = runEffectFn2 releaseNameImpl
 -- | through the browser's Web MIDI, where nothing is ever held.
 holderOf :: MIDIAccess -> String -> Effect (Maybe String)
 holderOf access name = toMaybe <$> runEffectFn2 holderOfImpl access name
+
+-- | Whether **this connection** holds a name: not just a client with this
+-- | app's name, which a second tab also has. `false` through Web MIDI.
+holding :: MIDIAccess -> String -> Effect Boolean
+holding = runEffectFn2 holdingImpl
+
+-- | **Ask for a name.** Free, it is claimed. Held, the holder is told who
+-- | wants it (`onWanted`) and answers with `grantName` or `refuseWant`; the
+-- | hub decides nothing. A grant arrives as a change of claims (`onClaims`),
+-- | a refusal through `onRefused`.
+wantName :: MIDIAccess -> String -> Effect Unit
+wantName = runEffectFn2 wantNameImpl
+
+-- | Hand a name this connection holds to the client called `to`.
+grantName :: MIDIAccess -> String -> String -> Effect Unit
+grantName = runEffectFn3 grantNameImpl
+
+-- | Say no to a want, with the reason, which the wanter is told.
+refuseWant :: MIDIAccess -> String -> String -> String -> Effect Unit
+refuseWant = runEffectFn4 refuseWantImpl
+
+-- | Hear that a client (by name) wants a name this connection holds. Returns
+-- | the unsubscribe.
+onWanted :: MIDIAccess -> (String -> String -> Effect Unit) -> Effect (Effect Unit)
+onWanted = runEffectFn2 onWantedImpl
+
+-- | Hear that a holder refused this connection's want: name, holder, reason.
+onRefused :: MIDIAccess -> (String -> String -> String -> Effect Unit) -> Effect (Effect Unit)
+onRefused = runEffectFn2 onRefusedImpl
+
+-- | Hear that who holds what has changed (and once more with each reconnect).
+onClaims :: MIDIAccess -> Effect Unit -> Effect (Effect Unit)
+onClaims = runEffectFn2 onClaimsImpl
 
 -- | Ports, with duplicates removed: identity is the id, first sighting wins.
 outputs :: MIDIAccess -> Effect (Array MidiPort)
