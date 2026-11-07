@@ -93,10 +93,12 @@ export const onStateChangeImpl = (access, handler) => {
       portType: p && p.type ? String(p.type) : ""
     });
   };
-  access.onstatechange = cb;
-  return () => {
-    if (access.onstatechange === cb) access.onstatechange = null;
-  };
+  // Added, never assigned: `onstatechange` holds one handler, so a second
+  // subscriber silently replaced the first. The looper's process subscribes
+  // twice (the MC6 and the Twister), and after a replug only the later one
+  // re-attached; the other device went deaf until a restart (2026-11-07).
+  access.addEventListener("statechange", cb);
+  return () => access.removeEventListener("statechange", cb);
 };
 
 // ---- the hub ------------------------------------------------------------------
@@ -122,6 +124,14 @@ export const onStateChangeImpl = (access, handler) => {
 // since two owners of one controller is the problem the hub exists to end.
 export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
   const access = { inputs: new Map(), outputs: new Map(), onstatechange: null, sysexEnabled: true };
+  // As `MIDIAccess` is an EventTarget: any number of "statechange" listeners.
+  const stateListeners = new Set();
+  access.addEventListener = (type, k) => {
+    if (type === "statechange") stateListeners.add(k);
+  };
+  access.removeEventListener = (type, k) => {
+    if (type === "statechange") stateListeners.delete(k);
+  };
   // Who holds what, as the hub last said: name -> client name.
   access.claims = {};
   // Outputs this app has claimed. A claim ends with its connection, so they
@@ -170,7 +180,9 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
   let warned = false;
 
   const fire = (port) => {
-    if (access.onstatechange) access.onstatechange({ port });
+    const ev = { port };
+    if (access.onstatechange) access.onstatechange(ev);
+    Array.from(stateListeners).forEach((k) => k(ev));
   };
 
   const makeInput = (id, name) => ({ id, name, type: "input", state: "connected", connection: "open", onmidimessage: null });
