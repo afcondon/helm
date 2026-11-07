@@ -142,6 +142,20 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
   // tell "I hold it" from "another tab with my name holds it".
   access.self = null;
   access.holders = {};
+  // Ports this app watches (told what anyone sends them); watched again on
+  // every reconnect, like claims.
+  const watched = new Set();
+  access.watch = (id) => {
+    watched.add(id);
+    say({ t: "watch", port: id });
+  };
+  access.unwatch = (id) => {
+    watched.delete(id);
+    say({ t: "unwatch", port: id });
+  };
+  access.ask = (id, text) => say({ t: "ask", port: id, text });
+  access.onSent = new Set();
+  access.onAsked = new Set();
   access.want = (id) => say({ t: "want", port: id });
   access.grant = (id, to) => say({ t: "grant", port: id, to });
   access.refuse = (id, to, why) => say({ t: "refuse", port: id, to, why });
@@ -206,6 +220,7 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
       warned = false;
       ws.send(JSON.stringify({ t: "hello", client }));
       claimed.forEach((id) => ws.send(JSON.stringify({ t: "claim", port: id })));
+      watched.forEach((id) => ws.send(JSON.stringify({ t: "watch", port: id })));
     };
     ws.onmessage = (ev) => {
       let m;
@@ -233,6 +248,11 @@ export const requestHubAccessImpl = (url, client, waitMs, onOk, onFail) => {
         access.onClaims.forEach((k) => k());
       } else if (m.t === "wanted") {
         access.onWanted.forEach((k) => k(String(m.port), String(m.by)));
+      } else if (m.t === "sent") {
+        const data = Array.isArray(m.data) ? m.data : [];
+        access.onSent.forEach((k) => k(String(m.port), data));
+      } else if (m.t === "asked") {
+        access.onAsked.forEach((k) => k(String(m.port), String(m.by), String(m.text || "")));
       } else if (m.t === "refused") {
         access.onRefused.forEach((k) => k(String(m.port), String(m.by), String(m.why || "")));
       } else if (m.t === "error") {
@@ -319,3 +339,21 @@ export const holderOfImpl = (access, name) => {
   const c = access && access.claims;
   return c && typeof c[name] === "string" ? c[name] : null;
 };
+
+export const watchPortImpl = (access, name) => {
+  if (access && typeof access.watch === "function") access.watch(name);
+};
+
+export const unwatchPortImpl = (access, name) => {
+  if (access && typeof access.unwatch === "function") access.unwatch(name);
+};
+
+export const askHolderImpl = (access, name, text) => {
+  if (access && typeof access.ask === "function") access.ask(name, text);
+};
+
+export const onSentImpl = (access, k) =>
+  listen(access && access.onSent, (port, data) => k(port)(data)());
+
+export const onAskedImpl = (access, k) =>
+  listen(access && access.onAsked, (port, by, text) => k(port)(by)(text)());

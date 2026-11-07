@@ -163,6 +163,8 @@ const scan = () => {
   outputs = outs;
   if (inChanged) openAllInputs();
   if (outChanged) closeAllOutputs();
+  // A device that went away and came back shows nothing it was sent before.
+  for (const id of was) if (!now.has(id)) lastSent.delete(id);
   broadcast(portsMessage());
 };
 
@@ -209,6 +211,40 @@ const report = (text, client) => {
   if (client && client.ws.readyState === 1) client.ws.send(JSON.stringify({ t: "error", text }));
 };
 
+// ---- watching what is sent ---------------------------------------------------
+//
+// A client can watch an output: it is told every message the hub delivers to
+// that port, from whoever sends it. That is how a screen shows what a
+// controller it does not hold is showing (PWYF's minimap of the Twister while
+// the looper's process holds it). Subscribe, never infer: the watcher sees the
+// device's own picture, not a reconstruction of it.
+//
+// The last value sent on each (status, controller) of a port is kept, and a
+// new watcher is told all of them first, so it starts from the picture rather
+// than waiting for the next change. Only three-byte control changes are kept:
+// that is every LED a controller has, and nothing else needs replaying.
+
+const watches = new Map(); // port id -> Set of clients
+const lastSent = new Map(); // port id -> Map "status,cc" -> bytes
+
+const remember = (port, data) => {
+  if (data.length !== 3 || (data[0] & 0xf0) !== 0xb0) return;
+  let held = lastSent.get(port);
+  if (!held) lastSent.set(port, (held = new Map()));
+  held.set(`${data[0]},${data[1]}`, data);
+};
+
+const tellWatchers = (from, port, data) => {
+  const ws = watches.get(port);
+  if (!ws) return;
+  const text = JSON.stringify({ t: "sent", port, data, by: from.name });
+  for (const w of ws) if (w !== from && w.ws.readyState === 1) w.ws.send(text);
+};
+
+const dropWatchesOf = (client) => {
+  for (const [, ws] of watches) ws.delete(client);
+};
+
 const sendNow = (client, port, data) => {
   const holder = claims.get(port);
   if (holder !== undefined && holder !== client) {
@@ -233,6 +269,8 @@ const sendNow = (client, port, data) => {
     out.sendMessage(data);
     counts.out++;
     client.sent++;
+    remember(port, data);
+    tellWatchers(client, port, data);
   } catch (e) {
     report(`send to ${port} failed: ${e.message}`, client);
   }
@@ -299,6 +337,34 @@ const onMessage = (client, text) => {
       }
       return;
     }
+    case "watch": {
+      let ws = watches.get(m.port);
+      if (!ws) watches.set(m.port, (ws = new Set()));
+      ws.add(client);
+      console.log(`watch: ${client.name} watches ${m.port}`);
+      const held = lastSent.get(m.port);
+      if (held && client.ws.readyState === 1)
+        for (const data of held.values())
+          client.ws.send(JSON.stringify({ t: "sent", port: m.port, data, by: "" }));
+      return;
+    }
+    case "unwatch": {
+      const ws = watches.get(m.port);
+      if (ws) ws.delete(client);
+      return;
+    }
+    // A request to whoever holds a port, which only the holder can act on
+    // (a screen asking the looper's process to show page 3). Relayed, never
+    // interpreted: what `text` means is between the asker and the holder.
+    case "ask": {
+      const holder = claims.get(m.port);
+      if (holder === undefined) return report(`nobody holds ${m.port} to ask`, client);
+      if (holder === client) return;
+      console.log(`ask: ${client.name} asks ${holder.name} (${m.port}): ${m.text}`);
+      if (holder.ws.readyState === 1)
+        holder.ws.send(JSON.stringify({ t: "asked", port: m.port, by: client.name, text: String(m.text || "") }));
+      return;
+    }
     case "send": {
       if (!Array.isArray(m.data) || m.data.length === 0) return report("a send with no bytes", client);
       const delay = Number(m.delayMs) || 0;
@@ -344,6 +410,7 @@ wss.on("connection", (ws) => {
   ws.on("message", (data) => onMessage(client, String(data)));
   ws.on("close", () => {
     clients.delete(client);
+    dropWatchesOf(client);
     dropClaimsOf(client);
     console.log(`client gone: ${client.name}`);
   });

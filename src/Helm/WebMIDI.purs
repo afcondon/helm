@@ -42,6 +42,11 @@ module Helm.WebMIDI
   , onWanted
   , onRefused
   , onClaims
+  , watchPort
+  , unwatchPort
+  , askHolder
+  , onSent
+  , onAsked
   , outputs
   , inputs
   , findOutput
@@ -110,6 +115,11 @@ foreign import refuseWantImpl :: EffectFn4 MIDIAccess String String String Unit
 foreign import onWantedImpl :: EffectFn2 MIDIAccess (String -> String -> Effect Unit) (Effect Unit)
 foreign import onRefusedImpl :: EffectFn2 MIDIAccess (String -> String -> String -> Effect Unit) (Effect Unit)
 foreign import onClaimsImpl :: EffectFn2 MIDIAccess (Effect Unit) (Effect Unit)
+foreign import watchPortImpl :: EffectFn2 MIDIAccess String Unit
+foreign import unwatchPortImpl :: EffectFn2 MIDIAccess String Unit
+foreign import askHolderImpl :: EffectFn3 MIDIAccess String String Unit
+foreign import onSentImpl :: EffectFn2 MIDIAccess (String -> Array Int -> Effect Unit) (Effect Unit)
+foreign import onAskedImpl :: EffectFn2 MIDIAccess (String -> String -> String -> Effect Unit) (Effect Unit)
 foreign import releaseOutputImpl :: EffectFn2 MIDIAccess MIDIOutput Unit
 foreign import outputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
 foreign import inputsImpl :: EffectFn1 MIDIAccess (Array MidiPort)
@@ -234,6 +244,30 @@ onRefused = runEffectFn2 onRefusedImpl
 -- | Hear that who holds what has changed (and once more with each reconnect).
 onClaims :: MIDIAccess -> Effect Unit -> Effect (Effect Unit)
 onClaims = runEffectFn2 onClaimsImpl
+
+-- | **Watch an output**: be told every message the hub delivers to it, from
+-- | whoever sends it (`onSent`), starting with the last value of each of its
+-- | lights. How a screen shows what a controller it does not hold is showing.
+-- | Nothing through Web MIDI, where there is no one else to watch.
+watchPort :: MIDIAccess -> String -> Effect Unit
+watchPort = runEffectFn2 watchPortImpl
+
+unwatchPort :: MIDIAccess -> String -> Effect Unit
+unwatchPort = runEffectFn2 unwatchPortImpl
+
+-- | **Ask whoever holds a name** to do something only the holder can (show a
+-- | page). The hub relays `text` and decides nothing; the holder hears it
+-- | through `onAsked`.
+askHolder :: MIDIAccess -> String -> String -> Effect Unit
+askHolder = runEffectFn3 askHolderImpl
+
+-- | Hear a message sent to a watched output: port, bytes.
+onSent :: MIDIAccess -> (String -> Array Int -> Effect Unit) -> Effect (Effect Unit)
+onSent = runEffectFn2 onSentImpl
+
+-- | Hear a request to a name this connection holds: name, asker, text.
+onAsked :: MIDIAccess -> (String -> String -> String -> Effect Unit) -> Effect (Effect Unit)
+onAsked = runEffectFn2 onAskedImpl
 
 -- | Ports, with duplicates removed: identity is the id, first sighting wins.
 outputs :: MIDIAccess -> Effect (Array MidiPort)

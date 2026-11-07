@@ -55,3 +55,13 @@ told its own connection id, and claims carry holders by id as well as by name,
 so `holding access name` answers "is it this connection", which two tabs with
 one name could not tell from `holderOf`. `onClaims`, `onWanted` and
 `onRefused` are the listeners.
+
+**Watching an output.** `watchPort` tells a client every message the hub
+delivers to that output, from whoever sends it (`onSent`: port, bytes), and
+first replays the last value sent on each of its control changes, so a
+watcher starts from the device's picture. Sends the hub refused are not
+passed on. This is how a screen shows a controller it does not hold (PWYF's
+Twister minimap while the looper's process holds it): subscribe to what the
+device is shown, never reconstruct it. `askHolder` relays a request to
+whoever holds a name (`onAsked`: name, asker, text); the hub does not read
+the text.
