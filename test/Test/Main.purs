@@ -33,6 +33,9 @@ main = do
   assertEqual { actual: parse [ 0x90, 0, 64 ], expected: Nothing }
   assertEqual { actual: layerOf [ 0xB0, 50, 1 ], expected: Just 3 }
   assertEqual { actual: layerOf [ 0xB4, 9, 127 ], expected: Nothing }
+  -- A press of the device's own layer button (measured 2026-11-07).
+  assertEqual { actual: layerOf [ 0xB3, 1, 127 ], expected: Just 1 }
+  assertEqual { actual: layerOf [ 0xB3, 0, 0 ], expected: Nothing }
 
   -- Lights
   assertEqual { actual: ring k5 200, expected: [ 0xB0, 21, 127 ] }

@@ -92,15 +92,26 @@ knobCC k = k.layer * encodersPerLayer + k.index
 knobOf :: Int -> Knob
 knobOf cc = { layer: cc / encodersPerLayer, index: cc `mod` encodersPerLayer }
 
--- | Which layer a raw message came from — the one *certain* answer to "where
--- | is the device", since it travels in every encoder message. `Nothing` for
--- | messages that carry no layer (the side buttons' CC means something else).
+-- | Which layer a raw message says the device is on. Two sources:
+-- |
+-- | - **an encoder message** (turns on ch 1, presses on ch 2) carries its
+-- |   layer in its CC, `16 * layer + index`;
+-- | - **a layer change**: pressing one of the device's own layer buttons sends
+-- |   ch 4, CC *layer*, value 127 for the layer it arrives on (and value 0 for
+-- |   the one it left, which says nothing about where it is). Measured
+-- |   2026-11-07 through Helm's hub (`ch4 cc0 v0` then `ch4 cc1 v127`); the
+-- |   note of 2026-10-17 that the buttons send nothing was wrong.
+-- |
+-- | `Nothing` for anything else (the ch 5 side buttons mean something else).
 layerOf :: Array Int -> Maybe Int
 layerOf bytes = do
   status <- Array.index bytes 0
   cc <- Array.index bytes 1
+  value <- Array.index bytes 2
   let ch = unChannel (statusChannel status)
-  if statusKind status == Just ControlChange && (ch == 1 || ch == 2) then Just (cc / encodersPerLayer)
+  if statusKind status /= Just ControlChange then Nothing
+  else if ch == 1 || ch == 2 then Just (cc / encodersPerLayer)
+  else if ch == 4 && cc < layers && value == 127 then Just cc
   else Nothing
 
 parse :: Array Int -> Maybe TwisterMsg
