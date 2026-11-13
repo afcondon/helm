@@ -1,0 +1,96 @@
+{
+  "glassbox": 2,
+  "id": "helm-claim",
+  "title": "A name on the Helm hub",
+
+  "notes": [
+    "One name on the hub: an output such as the Twister, or a responsibility",
+    "such as itajara:switches. The hub keeps one of these machines per name.",
+    "",
+    "Who holds the name is NOT a state. The hub behaves the same whoever the",
+    "holder is, so the holder's identity stays in the host, and reaches the",
+    "machine as one fact about each request: was it sent by the holder. That",
+    "is the elevator's lesson about floors, applied to connections.",
+    "",
+    "A grant therefore stays in 'held': the holder changes and the mode does",
+    "not. The frames the hub sends in reply (claims, wanted, refused, asked)",
+    "are not in this machine either. Glassbox commands belong to entering and",
+    "leaving a state, and most of the hub's replies happen on a request that",
+    "changes no state. They are pinned by the scenarios in helm-hub.json.",
+    "",
+    "What this machine does pin: which requests change whether the name is",
+    "held, which are refused, and why.",
+    "",
+    "Written 2026-11-13 from hub/hub.mjs as it stood, as part of the wire",
+    "declarations spike. hub/conformance-machine.mjs drives the real hub",
+    "through every vector generated from this file."
+  ],
+
+  "initial": "free",
+  "clock": "seconds",
+
+  "states": [
+    { "id": "free", "label": "Free" },
+    { "id": "held", "label": "Held" }
+  ],
+
+  "events": [
+    { "id": "claim",        "label": "claim",           "source": "user" },
+    { "id": "want",         "label": "want",            "source": "user" },
+    { "id": "grant",        "label": "grant",           "source": "user" },
+    { "id": "release",      "label": "release",         "source": "user" },
+    { "id": "refuse",       "label": "refuse",          "source": "user" },
+    { "id": "ask",          "label": "ask",             "source": "user" },
+    { "id": "holder-gone",  "label": "holder disconnects", "source": "runtime" }
+  ],
+
+  "config": [],
+
+  "facts": [
+    { "id": "by-holder",       "label": "The request is from the holder" },
+    { "id": "recipient-known", "label": "Exactly one client has the name given in 'to'" }
+  ],
+
+  "refusals": [
+    { "id": "held-by-another", "text": "the name is held by another connection" },
+    { "id": "not-the-holder",  "text": "only the holder can grant a name" },
+    { "id": "no-such-client",  "text": "no one client has that name" },
+    { "id": "nobody-to-ask",   "text": "nobody holds the name" }
+  ],
+
+  "commands": [],
+
+  "rules": [
+    { "from": "free", "on": "claim",   "cases": [ { "to": "held" } ] },
+    { "from": "free", "on": "want",    "cases": [ { "to": "held" } ] },
+    { "from": "free", "on": "grant",   "cases": [ { "refuse": "not-the-holder" } ] },
+    { "from": "free", "on": "release", "cases": [ { "stay": true } ] },
+    { "from": "free", "on": "refuse",  "cases": [
+      { "when": { "fact": "recipient-known" }, "stay": true },
+      { "refuse": "no-such-client" }
+    ]},
+    { "from": "free", "on": "ask",         "cases": [ { "refuse": "nobody-to-ask" } ] },
+    { "from": "free", "on": "holder-gone", "cases": [ { "stay": true } ] },
+
+    { "from": "held", "on": "claim", "cases": [
+      { "when": { "fact": "by-holder" }, "stay": true },
+      { "refuse": "held-by-another" }
+    ]},
+    { "from": "held", "on": "want", "cases": [ { "stay": true } ] },
+    { "from": "held", "on": "grant", "cases": [
+      { "when": { "not": { "fact": "by-holder" } }, "refuse": "not-the-holder" },
+      { "when": { "not": { "fact": "recipient-known" } }, "refuse": "no-such-client" },
+      { "stay": true }
+    ]},
+    { "from": "held", "on": "release", "cases": [
+      { "when": { "fact": "by-holder" }, "to": "free" },
+      { "stay": true }
+    ]},
+    { "from": "held", "on": "refuse", "cases": [
+      { "when": { "fact": "recipient-known" }, "stay": true },
+      { "refuse": "no-such-client" }
+    ]},
+    { "from": "held", "on": "ask",         "cases": [ { "stay": true } ] },
+    { "from": "held", "on": "holder-gone", "cases": [ { "to": "free" } ] }
+  ]
+}

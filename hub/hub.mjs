@@ -14,32 +14,11 @@
 // object shaped like Web MIDI's `MIDIAccess`, so an app changes how it gets
 // access and nothing else. What a press *means* moves in here in 3c.
 //
-// Protocol, JSON text frames:
-//
-//   hub -> app   {t:"ports", inputs:[{id,name}], outputs:[{id,name}]}
-//                  on connect, and again whenever the machine's ports change.
-//                  The app diffs the lists; the hub sends no per-port events.
-//                {t:"msg", port, data:[bytes]}   every input message, to all.
-//                {t:"error", text}               a send that could not go.
-//                {t:"claims", claims:{port: client}, holders:{port: id}}
-//                  who holds which name, on connect and whenever it changes:
-//                  by client name (for people) and by connection id (so two
-//                  connections with one name can each tell whether it is them).
-//                {t:"you", id}                   this connection's id, on connect.
-//                {t:"wanted", port, by}          to a holder: `by` wants the name.
-//                {t:"refused", port, by, why}    to a wanter: the holder said no.
-//   app -> hub   {t:"hello", client}             names the app in /state.
-//                {t:"send", port, data:[bytes], delayMs}
-//                {t:"claim", port}               hold an output: only the
-//                  holder's sends reach it. Granted if no live client holds it.
-//                {t:"grant", port, to}           the holder hands it to `to`.
-//                {t:"release", port}
-//                {t:"want", port}                ask for a name: a claim if no
-//                  one holds it, otherwise passed to the holder as "wanted",
-//                  who grants it or refuses. The hub decides nothing: who
-//                  ought to hold a name is the holders' business, and the
-//                  hub only carries the asking.
-//                {t:"refuse", port, to, why}     the holder says no to `to`.
+// The protocol is declared in `conformance/HELM-HUB.md`: every frame, as
+// two PureScript data types (`test/Hub/Protocol.purs`), with vectors that
+// `make conformance` replays against this file and against the client. It
+// was a comment here until 2026-11-13, and the comment had fallen five
+// kinds of frame behind the code. Change the declaration first.
 //
 // A port's id is its name (with " #2" for a second port of the same name),
 // so it is the same across a replug and across a hub restart, which Web
@@ -65,7 +44,10 @@
 // framing, which is Helm's phase 3 (the MC6 code moving into Helm).
 
 import http from "node:http";
-import midi from "@julusian/midi";
+
+// The conformance replay (`conformance/HELM-HUB.md`) runs this file with
+// HELM_HUB_FAKE_MIDI set, and then no real port is opened.
+const midi = (await import(process.env.HELM_HUB_FAKE_MIDI ? "./fake-midi.mjs" : "@julusian/midi")).default;
 import { WebSocketServer } from "ws";
 
 const PORT = Number(process.env.PORT || 3039);

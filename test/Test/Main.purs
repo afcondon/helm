@@ -5,7 +5,11 @@ import Prelude
 import Data.Array (foldl)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
+import Data.Array as Array
+import Data.Foldable (for_)
 import Effect.Console (log)
+import Effect.Exception (throw)
+import Hub.Check as Hub
 import Helm.Midi (controlChange, unsafeCC, unsafeChannel, unsafeMidiValue)
 import Helm.Twister (TwisterMsg(..), layerOf, colour, colourBrightness, parse, ring, ringBrightness)
 import Helm.Twister.Guard (Event(..), empty, step, timing)
@@ -21,6 +25,11 @@ run evs = (foldl go { g: empty, out: [] } evs).out
 
 main :: Effect Unit
 main = do
+  -- The hub's protocol: the reference codec against its declared cases.
+  for_ Hub.failures \failure -> log ("FAIL  " <> failure)
+  log ("hub protocol: " <> Hub.summary <> "; " <> show (Array.length Hub.failures) <> " failures")
+  unless (Array.null Hub.failures) (throw "the hub protocol reference disagrees with its declared cases")
+
   let k0 = { layer: 0, index: 0 }
       k5 = { layer: 1, index: 5 }
 

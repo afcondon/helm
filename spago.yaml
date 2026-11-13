@@ -26,8 +26,11 @@ package:
   test:
     main: Test.Main
     dependencies:
+      - argonaut-core
       - assert
       - console
+      - exceptions
+      - foreign-object
 
 # A workspace of its own so Helm builds and tests here without a consumer.
 # PWYF and Triggerfish reach it as a path dependency and ignore this stanza.
