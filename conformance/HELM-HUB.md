@@ -3,7 +3,8 @@
 Every frame that passes between the hub (`hub/hub.mjs`, WebSocket on :3039)
 and an app (`src/Helm/WebMIDI.js`).
 
-`test/Hub/Protocol.purs` is the reference: two data types and one codec.
+`test/Hub/Protocol.purs` is the reference: each message described once,
+and two data types over the descriptions.
 `conformance/vectors/helm-hub.json` is generated from it and replayed against
 both ends. `conformance/machines/helm-claim.json` is the state machine of one
 name. If any of these disagree with this file, that is a bug, and it is
@@ -28,35 +29,43 @@ the same name.
 
 ### An app says
 
+<!-- generated:app -->
 | `t` | Fields | Meaning |
 |---|---|---|
 | `hello` | `client` string | Names the app. Once, on connecting. |
-| `send` | `port` name, `data` bytes, `delayMs` number, zero or more | Bytes for an output, now or later. |
+| `send` | `port` name; `data` bytes; `delayMs` number, zero or more | Bytes for an output, now or later. |
 | `claim` | `port` name | Hold a name. Granted if no other live connection holds it. |
 | `want` | `port` name | Ask for a name: a claim if it is free, otherwise passed to the holder. |
-| `grant` | `port` name, `to` string | The holder hands the name to the one client called `to`. |
-| `refuse` | `port` name, `to` string, `why` string | The holder says no to `to`. `why` may be empty. |
+| `grant` | `port` name; `to` string | The holder hands the name to the one client called `to`. |
+| `refuse` | `port` name; `to` string; `why` string | The holder says no to `to`. `why` may be empty. |
 | `release` | `port` name | The holder lets the name go. |
 | `watch` | `port` name | Be told every message the hub delivers to this output. |
 | `unwatch` | `port` name | Stop being told. |
-| `ask` | `port` name, `text` string | A request to whoever holds the name. The hub relays `text` unread. |
+| `ask` | `port` name; `text` string | A request to whoever holds the name. The hub relays `text` unread. |
+<!-- /generated:app -->
 
 ### The hub says
 
-| `t` | Fields | To | Meaning |
-|---|---|---|---|
-| `you` | `id` whole number | the new connection | Its connection number. Once. |
-| `ports` | `inputs`, `outputs`: arrays of `{id, name}` | the new connection; everyone on a change | The machine's ports. |
-| `claims` | `claims`: name to client name; `holders`: name to connection number | the new connection; everyone on a change | Who holds what. |
-| `msg` | `port` name, `data` bytes | everyone | A message that arrived on an input. |
-| `error` | `text` string | the app at fault | Something it asked for could not be done. |
-| `wanted` | `port` name, `by` string | the holder | `by` wants the name. |
-| `refused` | `port` name, `by` string, `why` string | the wanter | The holder, `by`, said no. |
-| `sent` | `port` name, `data` bytes, `by` string | watchers, not the sender | `by` sent this to the output. |
-| `asked` | `port` name, `by` string, `text` string | the holder | `by` asks this. |
+<!-- generated:hub -->
+| `t` | Fields | Meaning |
+|---|---|---|
+| `you` | `id` whole number | To a new connection: its connection number. Once. |
+| `ports` | `inputs` array of {id, name}; `outputs` array of {id, name} | To a new connection, and to everyone on a change: the machine's ports. |
+| `claims` | `claims` table of string; `holders` table of whole number | To a new connection, and to everyone on a change: who holds what. |
+| `msg` | `port` name; `data` bytes | To everyone: a message that arrived on an input. |
+| `error` | `text` string | To the app at fault: something it asked for could not be done. |
+| `wanted` | `port` name; `by` string | To the holder: `by` wants the name. |
+| `refused` | `port` name; `by` string; `why` string | To the wanter: the holder, `by`, said no. |
+| `sent` | `port` name; `data` bytes; `by` string | To watchers, not the sender: `by` sent this to the output. An empty `by` is the hub saying what the output last showed. |
+| `asked` | `port` name; `by` string; `text` string | To the holder: `by` asks this of it. |
+<!-- /generated:hub -->
 
-`sent` with an empty `by` is the hub telling a new watcher what the output
-last showed: the last value of each control change, and nothing else.
+The two tables above are generated from the descriptions in
+`test/Hub/Protocol.purs` by `make vectors`, and `make check-vectors` fails
+if they are out of date. Do not edit them here.
+
+What the hub replays to a new watcher is the last value of each control
+change sent to that output, and nothing else.
 
 The text of an `error` is for people. Nothing may depend on its wording, and
 the vectors do not pin it.

@@ -26,9 +26,11 @@
           "dependencies": [
             "argonaut-core",
             "assert",
+            "bifunctors",
             "console",
             "exceptions",
-            "foreign-object"
+            "foreign-object",
+            "hawser"
           ]
         }
       }
@@ -682,7 +684,11 @@
         "zipperarray": "2.0.0"
       }
     },
-    "extra_packages": {}
+    "extra_packages": {
+      "hawser": {
+        "path": "../../purescript-hylograph-libs/purescript-hawser"
+      }
+    }
   },
   "packages": {
     "aff": {
@@ -978,6 +984,23 @@
         "tailrec",
         "tuples",
         "unfoldable"
+      ]
+    },
+    "hawser": {
+      "type": "local",
+      "path": "../../purescript-hylograph-libs/purescript-hawser",
+      "dependencies": [
+        "argonaut-core",
+        "arrays",
+        "either",
+        "foldable-traversable",
+        "foreign-object",
+        "integers",
+        "maybe",
+        "numbers",
+        "prelude",
+        "strings",
+        "tuples"
       ]
     },
     "identity": {

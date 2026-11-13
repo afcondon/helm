@@ -30,10 +30,16 @@ package:
       - assert
       - console
       - exceptions
+      - bifunctors
       - foreign-object
+      - hawser
 
 # A workspace of its own so Helm builds and tests here without a consumer.
 # PWYF and Triggerfish reach it as a path dependency and ignore this stanza.
 workspace:
   packageSet:
     registry: 77.13.1
+  extraPackages:
+    # Wire descriptions, for the hub's protocol reference under test/ only.
+    hawser:
+      path: ../../purescript-hylograph-libs/purescript-hawser

@@ -11,7 +11,8 @@ import Data.Either (Either(..), isRight)
 import Data.Tuple (Tuple(..))
 import Foreign.Object as Object
 import Hub.Cases (Direction(..), FrameCase, Scenario, Step(..), appFrames, frameCases, scenarios)
-import Hub.Protocol (FromHub, ToHub, decodeFromHub, decodeToHub, encodeFromHub, encodeToHub, fromHubName, fromHubNames, toHubName, toHubNames)
+import Hawser.Json as J
+import Hub.Protocol (FromHub, ToHub, decodeFromHub, decodeToHub, encodeFromHub, encodeToHub, fromHubMechanical, fromHubName, fromHubNames, toHubMechanical, toHubName, toHubNames)
 
 failures :: Array String
 failures =
@@ -22,6 +23,8 @@ failures =
     <> coverage "the hub" fromHubNames heardInScenarios
     <> Array.concatMap (roundTrip "app" encodeToHub decodeToHub) (appFrames <> Array.concatMap said scenarios)
     <> Array.concatMap (roundTrip "hub" encodeFromHub decodeFromHub) (Array.concatMap heard scenarios)
+    <> Array.concatMap (mechanicalFailure "app" (decodeToHub >>> isRight)) toHubMechanical
+    <> Array.concatMap (mechanicalFailure "hub" (decodeFromHub >>> isRight)) fromHubMechanical
 
 summary :: String
 summary =
@@ -29,7 +32,15 @@ summary =
     <> show (Array.length appFrames)
     <> " app frames, "
     <> show (Array.length scenarios)
-    <> " scenarios"
+    <> " scenarios, "
+    <> show (Array.length toHubMechanical + Array.length fromHubMechanical)
+    <> " mechanical cases"
+
+-- | A case that follows from a description alone, against the reader.
+mechanicalFailure :: String -> (String -> Boolean) -> J.Case -> Array String
+mechanicalFailure who accepts testCase =
+  if accepts testCase.text == testCase.accept then []
+  else [ who <> "/mechanical/" <> testCase.name <> ": the reader disagrees: " <> testCase.text ]
 
 directionName :: Direction -> String
 directionName = case _ of

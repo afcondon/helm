@@ -17,12 +17,14 @@ test:
 vectors: test
 	$(GENERATE) > $(VECTORS).tmp
 	mv $(VECTORS).tmp $(VECTORS)
+	node hub/declaration.mjs write
 	cd $(GLASSBOX) && spago run -p glassbox-cli --quiet -- lint $(CURDIR)/$(MACHINES)
 	cd $(GLASSBOX) && spago run -p glassbox-cli --quiet -- vectors $(CURDIR)/$(MACHINES) $(CURDIR)/$(MACHINE_VECTORS)
 
 # Fails if the committed vector file is not what the cases generate.
 check-vectors: test
 	$(GENERATE) | diff -u $(VECTORS) -
+	node hub/declaration.mjs check
 
 # The reference, then both ends of the wire, then the machine.
 conformance: check-vectors

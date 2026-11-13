@@ -2,8 +2,8 @@
   "helm-hub-vectors": 1,
   "declaration": "conformance/HELM-HUB.md",
   "generatedBy": "Hub.Check in helm; do not edit by hand, run `make vectors`",
-  "appSays": ["hello","send","claim","grant","release","want","refuse","watch","unwatch","ask"],
-  "hubSays": ["ports","msg","error","claims","you","wanted","refused","sent","asked"],
+  "appSays": ["hello","send","claim","want","grant","refuse","release","watch","unwatch","ask"],
+  "hubSays": ["you","ports","claims","msg","error","wanted","refused","sent","asked"],
   "frames": [
     {"name":"hello","from":"app","text":"{\"t\":\"hello\",\"client\":\"pwyf\"}","expect":"accept","why":"names the app"},
     {"name":"send","from":"app","text":"{\"t\":\"send\",\"port\":\"Midi Fighter Twister\",\"data\":[176,3,64],\"delayMs\":0}","expect":"accept","why":"three bytes, now"},
